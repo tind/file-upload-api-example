@@ -5,13 +5,12 @@ from pathlib import Path
 from defusedxml.lxml import tostring
 from lxml.builder import E
 import mimetypes
-from helpers.xml_utils import create_datafield
 
 
-SITE_URL = 'https://winter4.tind.io/'
-API_KEY = '0e03f094-9dc9-4b8d-8f8b-a1787e419ed4'
+SITE_URL = 'https://library.tind.io/'
+API_KEY = ''
 OBJECT_STORE_NAME = 'TOS'
-CALLBACK_EMAIL = 'tind@tind.io'
+CALLBACK_EMAIL = 'demo@tind.io'
 
 
 APPEND_METADATA = {"245__a": "Test record",
@@ -54,6 +53,34 @@ def verify_checsum(file_path, upload_response):
         print('Checksum is not the same! %s' % (file_path,))
         return False
     return local_checksum
+
+
+def create_subfield(sub_code):
+    """
+    Create an empty subfield with a subfield code
+    """
+    new_subfield = E.subfield(code='{}'.format(sub_code))
+    return new_subfield
+
+
+def create_datafield(marc_key, subfield_tuple_lists=False):
+    """
+    marc_key: Five letter value: E.g. 245__
+    The subfield_tuple_list is on the form:
+    [('a', 'subfield text A'),
+     ('b', 'subfield text B')]
+    """
+    new_datafield = E.datafield(TAG='{}'.format(marc_key[:3]),
+                                ind1='{}'.format(marc_key[3].replace("_", "")),
+                                ind2='{}'.format(marc_key[4].replace("_", "")))
+
+    for subfield in subfield_tuple_lists:
+        new_subfield = create_subfield(subfield[0])
+        new_subfield.text = subfield[1]
+        if new_subfield.text:
+            new_datafield.append(new_subfield)
+
+    return new_datafield
 
 
 def create_fft_datafield(presigned_response, local_checksum, file_name):
