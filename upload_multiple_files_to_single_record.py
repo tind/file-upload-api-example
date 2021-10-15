@@ -33,7 +33,8 @@ def upload_single_file(file_name, presigned_response):
     headers = {'x-amz-acl': 'private'}
     data = presigned_response["data"]["fields"]
     files = {'file': open(file_name, 'rb')}
-    upload_response = requests.post(url, headers=headers, files=files, data=data)
+    # Time out if the file is not uploaded in 600 seconds
+    upload_response = requests.post(url, headers=headers, files=files, data=data, timeout=600)
 
     print(upload_response.status_code)
     return upload_response
