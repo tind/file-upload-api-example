@@ -1,4 +1,3 @@
-import json
 import requests
 import hashlib
 from pathlib import Path
@@ -7,11 +6,10 @@ from lxml.builder import E
 import mimetypes
 
 
-SITE_URL = 'https://library.tind.io/'
+SITE_URL = 'https://library.tind.io'
 API_KEY = ''
-OBJECT_STORE_NAME = 'TOS'
 CALLBACK_EMAIL = 'demo@tind.io'
-
+OBJECT_STORE_NAME = 'TOS'
 
 APPEND_METADATA = {"245__a": "Test record",
                    "269__a": "2021-10-14",
@@ -20,10 +18,15 @@ APPEND_METADATA = {"245__a": "Test record",
 
 def request_presigned_object():
     """Returns a presigned object"""
-    url = SITE_URL + 'storage/presigned_post?location=' + OBJECT_STORE_NAME
+    url = requests.compat.urljoin(SITE_URL, 'storage/presigned_post')
+    params = requests.compat.urlencode({'location': OBJECT_STORE_NAME})
+    url = "{}?{}".format(url, params)
+
     headers = {'Authorization': 'Token ' + API_KEY}
+
     r = requests.post(url, headers=headers)
-    response_object = json.loads(r.content)
+
+    response_object = r.json()
     return response_object
 
 
@@ -33,34 +36,41 @@ def upload_single_file(file_name, presigned_response):
     headers = {'x-amz-acl': 'private'}
     data = presigned_response["data"]["fields"]
     files = {'file': open(file_name, 'rb')}
-    # Time out if the file is not uploaded in 600 seconds
-    upload_response = requests.post(url, headers=headers, files=files, data=data, timeout=600)
+    # Time out if the request has not been able to communicate with the server in 10 seconds
+    upload_response = requests.post(url, headers=headers, files=files, data=data, timeout=10)
 
     print(upload_response.status_code)
     return upload_response
 
 
-def verify_checsum(file_path, upload_response):
+def get_md5_checksum(file_path):
+    """
+    Get the md5 checksum of the local file.
+    """
+    return hashlib.md5(open(file_path, 'rb').read()).hexdigest()
+
+
+
+def compare_checksum(local_checksum, upload_response):
     """
     Comparing the checksum of the local file with the returned checksum/Etag
-    stored in the upload response
+    stored in the upload response.
     """
-    local_checksum = hashlib.md5(open(file_path, 'rb').read()).hexdigest()
 
     etag = upload_response.headers.get('Etag', '')
     upload_checksum = etag.replace('"', '')
 
-    if local_checksum != upload_checksum:
-        print('Checksum is not the same! %s' % (file_path,))
-        return False
-    return local_checksum
+    if local_checksum == upload_checksum:
+        return True
+    return False
 
 
-def create_subfield(sub_code):
+def create_subfield(sub_code, content):
     """
     Create an empty subfield with a subfield code
     """
     new_subfield = E.subfield(code='{}'.format(sub_code))
+    new_subfield.text = content
     return new_subfield
 
 
@@ -76,16 +86,16 @@ def create_datafield(marc_key, subfield_tuple_lists=False):
                                 ind2='{}'.format(marc_key[4].replace("_", "")))
 
     for subfield in subfield_tuple_lists:
-        new_subfield = create_subfield(subfield[0])
-        new_subfield.text = subfield[1]
-        if new_subfield.text:
+        if subfield[1]:
+            new_subfield = create_subfield(subfield[0], subfield[1])
             new_datafield.append(new_subfield)
 
     return new_datafield
 
 
 def create_fft_datafield(presigned_response, local_checksum, file_name):
-    """Create the necessary FFT tag to link a file to a record.
+    """
+    Create the necessary FFT tag to link a file to a record.
     Calculates the mime type on the fly.
     If the mime type is not found, it should be added to a
     list similar to the hocr example.
@@ -107,10 +117,14 @@ def create_fft_datafield(presigned_response, local_checksum, file_name):
 
 def upload_metadata(string_xml):
     """
-    Used the record API to upload metadata together with the FFT tag.
+    Use the record API to upload metadata together with the FFT tag.
     The FFT tag will link the file to the record.
     """
-    url = SITE_URL + 'api/v1/record?&mode=insertorreplace&callback_email=' + CALLBACK_EMAIL
+    url = requests.compat.urljoin(SITE_URL, 'api/v1/record')
+    params = requests.compat.urlencode({'mode': 'insertorreplace',
+                                        'callback_email': CALLBACK_EMAIL})
+    url = "{}?{}".format(url, params)
+
     headers = {'Authorization': 'Token ' + API_KEY,
                'Content-Type': 'application/xml'}
 
@@ -169,11 +183,15 @@ if __name__ == '__main__':
             continue
 
         # Step 1: Get AWS presigned object
-        try:
-            presigned_response = request_presigned_object()
-        except ConnectionResetError:
-            print("Presign - File failed to upload due: %s" % (file_path,))
-            presigned_response = None
+        # Try to request the preseign object five times before going to the next file.
+        presigned_response = None
+        connections = 0
+        while presigned_response is None and connections < 5:
+            try:
+                presigned_response = request_presigned_object()
+            except ConnectionResetError:
+                connections += 1
+        if presigned_response is None:
             continue
 
         # Step 2: Upload file
@@ -183,18 +201,24 @@ if __name__ == '__main__':
             print("File failed to upload: %s" % (file_path,))
             continue
 
-        # Step 3: Verify checksum
-        local_checksum = verify_checsum(str(file_path), upload_response)
+        # Step 3: Get local checksum
+        local_checksum = get_md5_checksum(str(file_path))
 
-        # Step 4: Create FFT datafield and attach to record.
-        if local_checksum:
+        # Step 4: Compare the checksum of local file and uploaded file
+        verified = compare_checksum(local_checksum, upload_response)
+
+        # Step 5: Create FFT datafield and attach to record.
+        if verified:
             new_record.append(create_fft_datafield(presigned_response,
                                                    local_checksum,
                                                    file_path.name))
+        else:
+            print("The uploaded file does not match the local file: %s" % (file_path,))
 
         # print a status per 10 files
         if i + 1 % 10 == 0:
             print('Processed %s files' % (i + 1,))
 
-    # When all the files are uploaded to AWS S3, upload the metadata record to link the files.
+    # Step 6: When all the files are uploaded to AWS S3,
+    # upload the metadata record to link the files.
     upload_and_save_xml(new_record)
