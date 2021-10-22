@@ -43,15 +43,14 @@ def upload_single_file(file_name, presigned_response):
     return upload_response
 
 
-def get_md5_checksum(file_path):
+def get_md5_checksum_of_file(file_path):
     """
     Get the md5 checksum of the local file.
     """
     return hashlib.md5(open(file_path, 'rb').read()).hexdigest()
 
 
-
-def compare_checksum(local_checksum, upload_response):
+def get_md5_checksum_from_response(local_checksum, upload_response):
     """
     Comparing the checksum of the local file with the returned checksum/Etag
     stored in the upload response.
@@ -60,9 +59,7 @@ def compare_checksum(local_checksum, upload_response):
     etag = upload_response.headers.get('Etag', '')
     upload_checksum = etag.replace('"', '')
 
-    if local_checksum == upload_checksum:
-        return True
-    return False
+    return upload_checksum
 
 
 def create_subfield(sub_code, content):
@@ -74,7 +71,7 @@ def create_subfield(sub_code, content):
     return new_subfield
 
 
-def create_datafield(marc_key, subfield_tuple_lists=False):
+def create_datafield(marc_key, subfield_tuple_lists=[]):
     """
     marc_key: Five letter value: E.g. 245__
     The subfield_tuple_list is on the form:
@@ -202,13 +199,13 @@ if __name__ == '__main__':
             continue
 
         # Step 3: Get local checksum
-        local_checksum = get_md5_checksum(str(file_path))
+        local_checksum = get_md5_checksum_of_file(str(file_path))
 
         # Step 4: Compare the checksum of local file and uploaded file
-        verified = compare_checksum(local_checksum, upload_response)
+        remote_checksum = get_md5_checksum_from_response(upload_response)
 
         # Step 5: Create FFT datafield and attach to record.
-        if verified:
+        if local_checksum == remote_checksum:
             new_record.append(create_fft_datafield(presigned_response,
                                                    local_checksum,
                                                    file_path.name))
