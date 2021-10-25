@@ -179,7 +179,7 @@ if __name__ == '__main__':
         if file_path.is_dir():
             continue
 
-        # Step 1: Get AWS presigned object
+        # Step 1: Get AWS presigned object.
         # Try to request the preseign object five times before going to the next file.
         presigned_response = None
         connections = 0
@@ -198,13 +198,12 @@ if __name__ == '__main__':
             print("File failed to upload: %s" % (file_path,))
             continue
 
-        # Step 3: Get local checksum
+        # Step 3: Get the checksum from the local and uploaded file.
         local_checksum = get_md5_checksum_of_file(str(file_path))
-
-        # Step 4: Compare the checksum of local file and uploaded file
         remote_checksum = get_md5_checksum_from_response(upload_response)
 
-        # Step 5: Create FFT datafield and attach to record.
+        # Step 4: Compare the checksum of local file and uploaded file.
+        # If it match, create FFT datafield and attach it to record.
         if local_checksum == remote_checksum:
             new_record.append(create_fft_datafield(presigned_response,
                                                    local_checksum,
@@ -216,6 +215,6 @@ if __name__ == '__main__':
         if i + 1 % 10 == 0:
             print('Processed %s files' % (i + 1,))
 
-    # Step 6: When all the files are uploaded to AWS S3,
+    # Step 5: When all the files are uploaded to AWS S3,
     # upload the metadata record to link the files.
     upload_and_save_xml(new_record)
