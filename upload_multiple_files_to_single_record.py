@@ -50,7 +50,7 @@ def get_md5_checksum_of_file(file_path):
     return hashlib.md5(open(file_path, 'rb').read()).hexdigest()
 
 
-def get_md5_checksum_from_response(local_checksum, upload_response):
+def get_md5_checksum_from_response(upload_response):
     """
     Comparing the checksum of the local file with the returned checksum/Etag
     stored in the upload response.
