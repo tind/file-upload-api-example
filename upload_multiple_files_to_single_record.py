@@ -6,13 +6,14 @@ from lxml.builder import E
 import mimetypes
 
 
-SITE_URL = 'https://library.tind.io'
-API_KEY = ''
-CALLBACK_EMAIL = 'demo@tind.io'
-OBJECT_STORE_NAME = 'TOS'
+SITE_URL = 'https://library.tind.io'  # Change the URL to your own domain
+API_KEY = ''  # Add your private API key generated in the system
+CALLBACK_EMAIL = 'demo@tind.io'  # Change to your own email address
+OBJECT_STORE_NAME = 'TOS'  # TINDs default object storage name is TOS.
 
+# The following fields will be added to the record.
 APPEND_METADATA = {"245__a": "Test record",
-                   "269__a": "2021-10-14",
+                   "269__a": "2022-11-02",
                    "980__a": "DIGITIZED"}
 
 
@@ -172,11 +173,15 @@ if __name__ == '__main__':
                 create_datafield(key[0:5],
                                  [(key[5], val)]))
 
-    # Loop through all files in path, except DS_Store (MacOS specific files).
-    for i, file_path in enumerate(sorted(data_folder.rglob('*.[!DS_Store]*'))):
+    # Loop through all files in path in folders and subfolders.
+    i = 0
+    for file_path in sorted(data_folder.rglob('*')):
 
         # Ignore directories
         if file_path.is_dir():
+            continue
+        # Ignore DS_Store (MacOS specific files)
+        elif file_path.name == '.DS_Store':
             continue
 
         # Step 1: Get AWS presigned object.
@@ -214,6 +219,9 @@ if __name__ == '__main__':
         # print a status per 10 files
         if i + 1 % 10 == 0:
             print('Processed %s files' % (i + 1,))
+
+        # Since we are ignoring directories and DS_Store, count the number of files manually.
+        i += 1
 
     # Step 5: When all the files are uploaded to AWS S3,
     # upload the metadata record to link the files.
